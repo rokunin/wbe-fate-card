@@ -2,21 +2,35 @@
   "id": "fate-card",
   "title": "Fate Card",
   "description": "A quick Fate character card that lies on the Whiteboard Experience board: skills with dice, aspects, stress and consequences, and a portrait. Requires Whiteboard Experience 0.9.1 or newer.",
-  "version": "0.3.0",
-  "compatibility": { "minimum": "11", "verified": "14", "maximum": "14" },
-  "authors": [{ "name": "rokunin" }],
-  "esmodules": ["scripts/main.mjs"],
-  "styles": ["styles/fate-card.css"],
+  "version": "0.3.1",
+  "compatibility": {
+    "minimum": "11",
+    "verified": "14",
+    "maximum": "14"
+  },
+  "authors": [
+    {
+      "name": "rokunin"
+    }
+  ],
+  "esmodules": [
+    "scripts/main.mjs"
+  ],
+  "styles": [
+    "styles/fate-card.css"
+  ],
   "relationships": {
     "requires": [
       {
         "id": "whiteboard-experience",
         "type": "module",
-        "compatibility": { "minimum": "0.9.1" }
+        "compatibility": {
+          "minimum": "0.9.1"
+        }
       }
     ]
   },
   "url": "https://github.com/rokunin/wbe-fate-card",
   "manifest": "https://raw.githubusercontent.com/rokunin/wbe-fate-card/main/module.json",
-  "download": "https://github.com/rokunin/wbe-fate-card/releases/download/v0.3.0/module.zip"
+  "download": "https://github.com/rokunin/wbe-fate-card/releases/download/v0.3.1/module.zip"
 }

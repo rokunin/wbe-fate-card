@@ -781,7 +781,12 @@ export class FateCardView extends window.WhiteboardObject {
     const body = container.querySelector('.wbe-fate-card-body');
     if (!body) return; // not rendered yet (shouldn't happen once render() has run once)
     const existing = body.querySelector(`:scope > .wbe-fate-card-${region}`);
-    if (existing && existing.contains(document.activeElement) && document.activeElement?.isContentEditable) {
+    // While focus is moving from one field to another (the blur commit runs before the new
+    // field is focused), the field being focused counts as focused: rebuilding its region now
+    // would detach it and the click would land nowhere (owner report 2026-09-29: typing a name,
+    // then clicking an empty aspect, left no caret anywhere).
+    const active = this._focusMovingTo || document.activeElement;
+    if (existing && existing.contains(active) && active?.isContentEditable) {
       return;
     }
     const methodName = REGION_BUILDER_METHODS[region];
@@ -1311,7 +1316,16 @@ export class FateCardView extends window.WhiteboardObject {
       // committing" by simply never writing the edited text anywhere in the first place.
       this._endExclusiveEdit();
     };
-    el.addEventListener('blur', commitOnce);
+    el.addEventListener('blur', (e) => {
+      const next = e.relatedTarget;
+      const container = window.Whiteboard?.layer?.getObjectContainer(this.id);
+      this._focusMovingTo = next?.isContentEditable && container?.contains(next) ? next : null;
+      try {
+        commitOnce();
+      } finally {
+        this._focusMovingTo = null;
+      }
+    });
     el.addEventListener('keydown', (e) => this._handleFieldKeydown(e, el, kind, index, boxIndex, commitOnce, cancelOnce));
   }
 

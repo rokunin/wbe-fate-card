@@ -18,6 +18,8 @@ This card tries to keep Miro / Figma approach and adds the bits your table actua
 
 **Creating a card.** The GM creates cards with the card button on the WBE toolbar. Only the GM can create and delete them.
 
+![Creating a card](create-card.gif)
+
 **Playing dice and some more.** Click the die next to a skill to roll `4dF + skill` to chat (Dice So Nice picks it up). Click a stress or consequence box to mark it. Marking a red box opens the Consequences tab. The bottom tabs are Consequences, Stunts, Extras and More.
 
 **Editing.** Select the card and press **Edit** on its toolbar. Everything becomes editable:
@@ -28,6 +30,8 @@ This card tries to keep Miro / Figma approach and adds the bits your table actua
 - Portrait: click the frame to pick a file, paste a screenshot with Ctrl+V, or drop a file from disk. The ✥ button lets you drag the picture inside the frame, − and + zoom it, and you can switch the frame between the picture's shape, square and 3:4.
 - **Themes**: seven colour schemes plus your own colours for skills, text, UI and the text background. **⚙**: card language (English or Russian) and text/UI sizes.
 - Drag the corner handle to scale the card.
+
+![Filling a card from scratch](fill-card.gif)
 
 While someone edits a card, it is locked for everybody else until they finish. Changes go out when you leave a line, not on every keystroke.
 
@@ -51,6 +55,10 @@ Foundry VTT v11 to v14, with Whiteboard Experience 0.9.1 or newer.
 - Hiding fields from players is for convenience, not secrecy: the hidden text still reaches every player's browser.
 - Cards made with the old prototype (before 0.3.0) are removed the first time the GM loads the world with this version.
 
+## Credits
+
+The portrait in the demos is *The Rag Picker* by Guillaume-Charles Brun (1870), public domain, via [Wikimedia Commons](https://commons.wikimedia.org/wiki/File:CharlesGuillaumeBrunRagGather.jpg).
+
 ## License
 
 MIT
@@ -58,6 +66,10 @@ MIT
 ---
 
 ## Changelog
+
+### v0.3.1
+
+- Fixed: in edit mode, clicking from one line straight into another (say, from the name into an empty aspect) sometimes left no text cursor, so you had to click twice.
 
 ### v0.3.0
 
