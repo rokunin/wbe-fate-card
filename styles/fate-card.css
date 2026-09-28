@@ -1,0 +1,312 @@
+/**
+ * fate-card view-mode stylesheet. Ported from the approved mockup
+ * (fate-card/docs/mockup/card-mockup.html, owner-approved 2026-09-25) almost verbatim -
+ * see openspec/changes/fate-card-view-mode/design.md Decision 9. Selectors are renamed to
+ * this module's `wbe-fate-card-*` convention; `.card`/`.body` become the object's actual
+ * rendered container/inner element. Theme custom properties (--tx, --sk, --ink, --hl,
+ * --line, --boxbg, --onbg, --ontx, --red, --redon, --redtx, --frame) and the --fs/--u sizing
+ * variables keep their mockup names so the theme table in fate-card-view.mjs can be copied
+ * from the mockup's THEMES object without renaming keys.
+ *
+ * No editing/contenteditable rules are ported here - slice (a) never puts `contenteditable`
+ * on anything (see fate-card-view.mjs).
+ */
+
+@import url('https://fonts.googleapis.com/css2?family=PT+Serif:ital,wght@0,400;0,700;1,400&display=swap');
+
+.wbe-fate-card {
+  --serif: 'PT Serif', Georgia, 'Times New Roman', serif;
+  width: max-content;
+  user-select: none;
+}
+
+.wbe-fate-card-body {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto max-content minmax(0, 28em);
+  grid-template-rows: auto 1fr;
+  column-gap: 22px;
+  row-gap: 6px;
+  font-family: var(--serif);
+  font-size: var(--fs);
+  line-height: 1.45;
+  color: var(--tx);
+}
+
+.wbe-fate-card-left { grid-column: 1; grid-row: 1 / span 2; display: flex; flex-direction: column; gap: 10px; }
+.wbe-fate-card-skills { grid-column: 2; grid-row: 1; text-align: right; padding-top: calc(var(--fs) * 1.45 + 3px); color: var(--sk); }
+.wbe-fate-card-right { grid-column: 3; grid-row: 1; min-width: 0; }
+.wbe-fate-card-tabs { grid-column: 2 / 4; grid-row: 2; min-width: 0; contain: inline-size; }
+
+/*
+ * fate-card-portrait-framing (decision 24): the border/clip moved from the image to the wrap -
+ * a zoomed image's own border would otherwise scale (and visually escape the frame) along with
+ * the image itself; the wrap's border/overflow are unaffected by its child's own `transform`.
+ */
+.wbe-fate-card-portrait-wrap { position: relative; overflow: hidden; border: 3px solid var(--frame); box-sizing: border-box; }
+.wbe-fate-card-portrait {
+  display: block; width: 300px; max-height: 420px; object-fit: cover;
+}
+/* fate-card-portrait-framing: frame-shape modifiers (design.md Decision 5) - explicit height,
+ * clearing the 'natural' max-height rule; `object-fit: cover` (above) fills either exactly. */
+.wbe-fate-card-portrait--square { height: 300px; max-height: none; }
+.wbe-fate-card-portrait--frame34 { height: 400px; max-height: none; }
+/*
+ * fate-card-editing task 11 (mockup's `.portrait.empty`/`.editing .portrait`): the clickable/
+ * droppable empty-portrait placeholder (edit mode only - `_buildLeft` never renders this
+ * outside `this.editing`), and the pointer cursor on a filled portrait while editing (a click
+ * there re-opens the file picker to replace it).
+ */
+.wbe-fate-card-portrait-empty {
+  box-sizing: border-box; display: flex; align-items: center; justify-content: center; text-align: center;
+  width: 300px; height: 160px; padding: 20px; background: var(--ink);
+  border: 2px dashed color-mix(in srgb, var(--tx) 30%, transparent);
+  font: 13px system-ui, sans-serif; color: color-mix(in srgb, var(--tx) 60%, transparent); cursor: pointer;
+}
+.wbe-fate-card-body--editing .wbe-fate-card-portrait-wrap { cursor: pointer; }
+/*
+ * Found live (release verification, 2026-09-28): this element always carries BOTH
+ * `wbe-fate-card-remove` (the shared skill/aspect-row × button styling, `all: unset` further
+ * down this file) AND `wbe-fate-card-portrait-remove` (`_buildLeft`'s
+ * `remove.className = 'wbe-fate-card-remove wbe-fate-card-portrait-remove'`) - with a single-
+ * class selector here, both rules have equal specificity, so `all: unset`'s own reset of
+ * `position` back to `static` won by SOURCE ORDER alone (it comes later in this file), silently
+ * dropping this button out of absolute top-right placement into normal flow, right on top of the
+ * portrait-framing button row added right after it in the DOM (`_buildPortraitFramingControls`) -
+ * making that row visually and click-wise cover it (Playwright caught this directly: the remove
+ * button's own click was reliably intercepted by `.wbe-fate-card-portrait-toolbar`). The
+ * compound selector below outranks the single-class `all: unset` rule regardless of source
+ * order, matching how the element is actually classed.
+ */
+.wbe-fate-card-remove.wbe-fate-card-portrait-remove { position: absolute; top: 4px; right: 4px; margin-left: 0; }
+
+/*
+ * fate-card-portrait-framing (decision 24, revised: a small button row, not press-and-drag
+ * corner icons): ✥ (move-mode toggle) / "−" / "+" (zoom step) / frame-shape / ⟲ (reset), a
+ * horizontal row along the frame's bottom edge - `.wbe-fate-card-portrait-remove` keeps its own
+ * separate top-right corner, unchanged.
+ */
+.wbe-fate-card-portrait-toolbar {
+  position: absolute; left: 4px; right: 4px; bottom: 4px; z-index: 2;
+  display: flex; gap: 4px; justify-content: center;
+}
+.wbe-fate-card-portrait-icon {
+  all: unset; box-sizing: border-box;
+  display: inline-flex; align-items: center; justify-content: center;
+  /* fate-card-theme-colours (decision 25): "UI (tab titles, card controls)" - resting
+     colour/border only, driven by --uifg instead of --tx so it's overridable independently of
+     the main-text colour. Hover/active accents below stay on --hl unchanged. */
+  width: 22px; height: 22px; background: var(--ink); color: var(--uifg);
+  border: 1px solid color-mix(in srgb, var(--uifg) 35%, transparent);
+  cursor: pointer; font-size: 13px; line-height: 1;
+}
+.wbe-fate-card-portrait-icon:hover { background: var(--hl); border-color: var(--uifg); }
+/* The ✥ button's own pressed state while move mode is on. */
+.wbe-fate-card-portrait-move.is-active { background: var(--hl); border-color: var(--uifg); }
+.wbe-fate-card-portrait-shape { font-size: 11px; }
+/* decision 24: "the cursor shows it" - while move mode is on, dragging the image itself pans it. */
+.wbe-fate-card-portrait-wrap--move-mode .wbe-fate-card-portrait { cursor: move; }
+
+.wbe-fate-card-row { margin-bottom: 3px; }
+.wbe-fate-card-strip {
+  background: var(--ink); padding: 1px 7px;
+  -webkit-box-decoration-break: clone; box-decoration-break: clone;
+}
+.wbe-fate-card-row--name .wbe-fate-card-strip { font-weight: 700; }
+.wbe-fate-card-row--skill.wbe-fate-card-row--low .wbe-fate-card-strip { font-weight: 700; }
+.wbe-fate-card-row--hidden { opacity: .45; }
+.wbe-fate-card-row--hidden .wbe-fate-card-strip { text-decoration: line-through; }
+
+/* skill rows are one-liners: strip and die share the same height */
+.wbe-fate-card-row--skill { line-height: 1.3; white-space: nowrap; }
+.wbe-fate-card-row--skill .wbe-fate-card-strip { display: inline-block; padding: 2px 7px; vertical-align: middle; }
+.wbe-fate-card-row--skill.wbe-fate-card-flash .wbe-fate-card-strip,
+.wbe-fate-card-row--skill.wbe-fate-card-flash .wbe-fate-card-die { background: var(--hl); }
+.wbe-fate-card-field:empty::before { content: attr(data-ph); opacity: .4; }
+
+.wbe-fate-card-die {
+  all: unset; box-sizing: border-box; display: inline-flex; align-items: center; justify-content: center;
+  width: calc(1.3em + 4px); height: calc(1.3em + 4px); margin-left: 3px; vertical-align: middle;
+  /* fate-card-theme-colours (decision 25): "card controls" - see .wbe-fate-card-portrait-icon's
+     own comment above for why --uifg replaces --tx here. */
+  background: var(--ink); color: var(--uifg); border: 1px solid color-mix(in srgb, var(--uifg) 35%, transparent);
+  cursor: pointer; font: 1em/1 system-ui, sans-serif;
+}
+.wbe-fate-card-die svg { width: .9em; height: .9em; }
+.wbe-fate-card-die:hover { background: var(--hl); border-color: var(--uifg); }
+
+/*
+ * fate-card-editing tasks 8-10: the per-row remove (×) control (skills/aspects/box rows) and
+ * the "+ skill"/"+ aspect"/"+ row of boxes" add controls - ported from the mockup's own `.x`/
+ * `.add button` rules.
+ */
+.wbe-fate-card-remove {
+  all: unset; box-sizing: border-box; display: inline-flex; align-items: center; justify-content: center;
+  width: calc(1.3em + 4px); height: calc(1.3em + 4px); margin-left: 3px; vertical-align: middle;
+  background: var(--ink); color: #e0a0a0; border: 1px solid rgba(200, 90, 90, .45);
+  cursor: pointer; font-size: .85em;
+}
+.wbe-fate-card-remove:hover { background: #6b2020; color: #fff; }
+.wbe-fate-card-row--aspect .wbe-fate-card-remove {
+  vertical-align: top; margin-top: 1px; font-size: .75em; width: 1.6em; height: 1.6em;
+}
+.wbe-fate-card-add { margin-top: 4px; }
+/* task 9.1 (mockup's `.ehint`): the edit-mode hint line under the aspects list. */
+.wbe-fate-card-edit-hint {
+  display: inline-block; padding: 1px 6px; background: var(--ink); margin-top: 6px;
+  font: calc(var(--u) * .72) system-ui, sans-serif; color: color-mix(in srgb, var(--sk) 55%, transparent);
+}
+.wbe-fate-card-add button, .wbe-fate-card-box-rowctl button {
+  all: unset; cursor: pointer; font: calc(var(--u) * .8) system-ui, sans-serif; color: var(--ui-t, #c9ccd3);
+  background: var(--ui, #1b1d22); border: 1px solid var(--ui-b, #3a3d45); border-radius: 4px;
+  padding: 1px 7px; line-height: 1.5;
+}
+.wbe-fate-card-add button:hover, .wbe-fate-card-box-rowctl button:hover { filter: brightness(1.2); }
+
+/*
+ * task 8.3: the skill-name suggestion list - a child of `.wbe-fate-card-skills` (needs
+ * `position: relative` so the suggestion box's own `position: absolute` is relative to it, not
+ * the page), positioned by `_showSkillSuggestions` in that region's own local coordinate space.
+ */
+.wbe-fate-card-skills { position: relative; }
+.wbe-fate-card-suggestions {
+  position: absolute; z-index: 5; max-height: 16em; overflow: auto; min-width: 12em; width: max-content; padding: 3px 0;
+  background: #16171b; border: 1px solid #3a3d45; border-radius: 5px; box-shadow: 0 4px 14px rgba(0, 0, 0, .6);
+  font: calc(var(--u) * .9) var(--serif); color: var(--sk); text-align: left;
+}
+.wbe-fate-card-suggestion { padding: 2px 10px; cursor: pointer; white-space: nowrap; }
+.wbe-fate-card-suggestion:hover, .wbe-fate-card-suggestion--first { background: #3b4150; color: #fff; }
+
+/* stress and consequences: up to three rows as wide as the portrait, up to eight boxes each */
+.wbe-fate-card-boxes { display: flex; flex-direction: column; gap: 6px; width: 300px; }
+.wbe-fate-card-box-line { display: flex; align-items: center; gap: 6px; }
+.wbe-fate-card-box {
+  position: relative; flex: none; display: flex; align-items: center; justify-content: center;
+  border: 2px solid var(--line); background: var(--boxbg); color: var(--tx); cursor: pointer; line-height: 1;
+}
+.wbe-fate-card-box--red { border-color: var(--red); }
+.wbe-fate-card-box--marked { background: var(--onbg); color: var(--ontx); }
+.wbe-fate-card-box--red.wbe-fate-card-box--marked { background: var(--redon); color: var(--redtx); }
+.wbe-fate-card-box-value { min-width: .6em; text-align: center; }
+/* task 10.1: the per-box red/grey toggle dot (mockup's `.rd`) - a small circle in the box's
+   top-right corner, only rendered in edit mode. */
+.wbe-fate-card-box-red-toggle {
+  all: unset; position: absolute; top: -5px; right: -5px; width: 11px; height: 11px; border-radius: 50%;
+  background: var(--red); border: 2px solid #111; cursor: pointer;
+}
+.wbe-fate-card-box--red .wbe-fate-card-box-red-toggle { background: var(--line); }
+/* task 10.1: per-row +/-/× controls and the "+ row" control underneath the box rows. */
+.wbe-fate-card-box-rowctl { display: flex; align-items: center; gap: 3px; margin: -2px 0 2px; }
+.wbe-fate-card-box-rowctl span { font: calc(var(--u) * .75) system-ui, sans-serif; color: #8d919b; margin-right: 3px; }
+
+/* task 12.1: the per-row GM eye toggle (mockup's `.eye`/`.eye.off`) - GM-only, edit-mode only. */
+.wbe-fate-card-eye {
+  all: unset; cursor: pointer; font: calc(var(--u) * .8) system-ui, sans-serif; color: var(--ui-t, #c9ccd3);
+  background: var(--ui, #1b1d22); border: 1px solid var(--ui-b, #3a3d45); border-radius: 4px;
+  padding: 1px 5px; line-height: 1.5; margin-left: 5px; vertical-align: middle;
+}
+.wbe-fate-card-eye:hover { filter: brightness(1.2); }
+.wbe-fate-card-eye--off { opacity: .5; }
+
+/* tabs: free text, read-only in view mode */
+.wbe-fate-card-tabs-head { display: flex; gap: 4px; margin: 4px 0 3px; font-size: var(--u); color: color-mix(in srgb, var(--sk) 55%, transparent); }
+/* fate-card-theme-colours (decision 25): "UI (tab titles, card controls)" - every tab title's
+   text (active or not) driven by --uifg instead of the inherited --tx (main text), so it's
+   overridable independently of the main-text colour. */
+.wbe-fate-card-tab { cursor: pointer; background: var(--ink); padding: 0 7px; color: var(--uifg); }
+.wbe-fate-card-tab--active { color: var(--uifg); font-weight: 700; }
+.wbe-fate-card-tab-dot { font-style: normal; color: var(--uifg); margin-left: 2px; }
+.wbe-fate-card-tab-text { white-space: pre-wrap; }
+.wbe-fate-card-tab-text:empty { display: block; background: color-mix(in srgb, var(--ink) 55%, transparent); min-height: 1.45em; }
+.wbe-fate-card-tab-text:empty::before { content: attr(data-ph); opacity: .3; }
+
+/*
+ * Card toolbar (bug 1 fix): a screen-space overlay, created/destroyed entirely by
+ * FateCardPanel (fate-card-panel.mjs) via WBE's own selection show/hide mechanism - it is
+ * appended to document.body, not a descendant of the card's own container, so it is never
+ * affected by canvas zoom or the card's own `scale` (constant on-screen size either way), and
+ * only exists in the DOM while a card is selected on this client (I2/decision 22). Registered
+ * as a WBE UI selector (main.mjs's Whiteboard.registerUISelector, called from fate-card's own
+ * main.mjs) so a click on it is never treated as an empty-canvas click.
+ */
+.wbe-fate-card-toolbar {
+  /* Phase 1 owner-check fix 2: gap bumped 4px -> 6px, plus explicit separators around the NPC
+     button (fate-card-panel.mjs's `_build()`) - a bare 4px gap made the NPC label and the
+     duplicate icon read as touching live. */
+  position: fixed; display: flex; align-items: center; gap: 2px; padding: 3px;
+  white-space: nowrap; background: #1b1d22; border: 1px solid #3a3d45;
+  border-radius: 6px; box-shadow: 0 2px 10px rgba(0, 0, 0, .5); font: 13px/1 system-ui, sans-serif;
+  z-index: 10000; user-select: none;
+}
+/* Owner check 2026-09-28: one height for every control, emoji icons at text size (Windows draws
+   them larger than the text otherwise), a small gap between an icon and its label. */
+.wbe-fate-card-toolbar-btn {
+  all: unset; box-sizing: border-box; cursor: pointer; flex: none; height: 26px; min-width: 26px;
+  display: inline-flex; align-items: center; justify-content: center; gap: 4px;
+  padding: 0 7px; border-radius: 4px; color: #c9ccd3; font: 13px/1 system-ui, sans-serif;
+}
+.wbe-fate-card-toolbar-btn .wbe-fate-card-toolbar-icon { font-size: 13px; line-height: 1; }
+.wbe-fate-card-toolbar-btn:hover { background: #2c2f37; }
+.wbe-fate-card-toolbar-btn.wbe-fate-card-toolbar-btn--on { background: #3b4150; color: #fff; }
+.wbe-fate-card-toolbar-btn:disabled { opacity: .35; cursor: default; background: none; }
+/* task 8.2: the template <select>/undo control's own separators (mockup's `.tb .sep`) and the
+   template <select> itself (mockup's `.tb select`). */
+.wbe-fate-card-toolbar-sep { flex: none; width: 1px; height: 18px; background: #3a3d45; margin: 0 5px; }
+/* Foundry v13's global select styles (height, width) leak in; pin the menu to toolbar size. */
+.wbe-fate-card-toolbar select {
+  flex: none; width: auto; min-width: 0; max-width: 170px; height: 26px; min-height: 0; line-height: normal;
+  font: 12px system-ui, sans-serif; color: #c9ccd3; background: #1b1d22; border: 1px solid #3a3d45;
+  border-radius: 4px; padding: 0 4px; margin: 0; cursor: pointer; box-shadow: none;
+}
+/* Keyboard accessibility (fate-card-appearance task 5.1): every toolbar/popover button gets an
+   explicit visible focus ring - the browser default alone is easy to lose against this dark UI. */
+.wbe-fate-card-toolbar-btn:focus-visible,
+.wbe-fate-card-swatch:focus-visible {
+  outline: 2px solid #7aa2f7; outline-offset: 1px;
+}
+
+/*
+ * fate-card-appearance (slice c): the "⚙" appearance popover - colour scheme, language, text/UI
+ * size (fate-card-panel.mjs's `_buildAppearancePopover`/`_positionAppearancePopover`). A
+ * `position: fixed` sibling of the toolbar, same visual language (background/border/shadow/font
+ * match `.wbe-fate-card-toolbar` above), local-only UI that exists in the DOM only while open.
+ * Registered as a WBE UI selector alongside the toolbar (fate-card's own main.mjs) so a click
+ * inside it is never treated as an empty-canvas click.
+ */
+.wbe-fate-card-appearance-popover {
+  position: fixed; display: flex; flex-direction: column; gap: 8px; padding: 8px 10px;
+  background: #1b1d22; border: 1px solid #3a3d45; border-radius: 6px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, .55); font: 12px system-ui, sans-serif; color: #c9ccd3;
+  z-index: 10001; user-select: none; min-width: 200px;
+}
+.wbe-fate-card-appearance-section { display: flex; flex-direction: column; gap: 4px; }
+.wbe-fate-card-appearance-label { color: #8d919b; font-size: 11px; }
+.wbe-fate-card-swatch-row { display: flex; flex-wrap: wrap; gap: 6px; }
+.wbe-fate-card-swatch {
+  all: unset; box-sizing: border-box; cursor: pointer; width: 22px; height: 22px;
+  border-radius: 50%; border: 1px solid #555; display: inline-flex; align-items: center;
+  justify-content: center; font: 700 11px Georgia, 'Times New Roman', serif;
+}
+.wbe-fate-card-swatch:hover { filter: brightness(1.25); }
+.wbe-fate-card-swatch.wbe-fate-card-swatch--active { outline: 2px solid #fff; outline-offset: 1px; }
+.wbe-fate-card-lang-row { display: flex; gap: 4px; }
+.wbe-fate-card-size-stepper { flex-direction: row; align-items: center; gap: 6px; }
+.wbe-fate-card-size-stepper .wbe-fate-card-appearance-label { flex: 1; }
+.wbe-fate-card-appearance-value { min-width: 1.6em; text-align: center; color: #c9ccd3; }
+
+/*
+ * fate-card-editing tasks 6/7: minimal contenteditable affordance, ported from the mockup's
+ * own [contenteditable] rules (card-mockup.html - the reference for edit-mode/double-click
+ * visuals). This is the minimum needed for a field to visibly read as editable (a cursor, a
+ * focus highlight, a dashed frame while the whole card is in edit mode) - full edit-mode
+ * visual polish (skill/aspect ×, box-row controls, template menu, GM eye toggles, ...) is
+ * added by tasks 8-12, not here.
+ */
+.wbe-fate-card [contenteditable] { user-select: text; outline: none; cursor: text; }
+.wbe-fate-card [contenteditable]:focus { background: color-mix(in srgb, var(--tx) 16%, transparent); }
+.wbe-fate-card-body--editing [contenteditable] {
+  border-bottom: 1px dashed color-mix(in srgb, var(--tx) 55%, transparent);
+}
+.wbe-fate-card-body--editing .wbe-fate-card-skills [contenteditable] {
+  border-bottom-color: color-mix(in srgb, var(--sk) 45%, transparent);
+}
