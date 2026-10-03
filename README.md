@@ -67,6 +67,11 @@ MIT
 
 ## Changelog
 
+### v0.3.2
+
+- Fixed: with the text cursor still in a line, **+ aspect** and the **×** buttons on skills and aspects seemed to do nothing until you left edit mode, and the text you had just typed could get lost. They now work straight away.
+- The blue selection frame lagging behind the card when you switch edit mode is fixed in Whiteboard Experience 0.9.2, so update that too.
+
 ### v0.3.1
 
 - Fixed: in edit mode, clicking from one line straight into another (say, from the name into an empty aspect) sometimes left no text cursor, so you had to click twice.

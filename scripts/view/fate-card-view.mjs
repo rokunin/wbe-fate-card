@@ -2541,10 +2541,9 @@ export class FateCardView extends window.WhiteboardObject {
    * synchronously ahead of `click`), which commits it and rebuilds that region right out from
    * under the control - so the browser never delivers `click` to a node no longer in the
    * document. Wiring `mousedown` instead of `click`, with `preventDefault()`+`stopPropagation
-   * ()`, suppresses that default focus-shift entirely: the other field is simply left focused
-   * (its own text is not lost - it commits normally whenever it IS genuinely blurred later),
-   * this control's node is never replaced out from under itself, and `handler` runs against a
-   * guaranteed-still-connected element. Not used for the toolbar's `<select>` (a native
+   * ()`, suppresses that default focus-shift entirely, and `handler` runs against a
+   * guaranteed-still-connected element. The focused field is then committed explicitly before
+   * `handler` runs (see `_commitFocusedField` and the comment in the listener below). Not used for the toolbar's `<select>` (a native
    * dropdown needs its own default mousedown action to actually open) - see FateCardPanel's
    * own `_syncToolbar`/`refresh()` doc comments for how that case is handled instead (only
    * rebuilding the toolbar when what it shows actually changed, not on every unrelated commit).
@@ -2553,6 +2552,13 @@ export class FateCardView extends window.WhiteboardObject {
     el.addEventListener('mousedown', (e) => {
       e.preventDefault();
       e.stopPropagation();
+      // Owner report 2026-10-03: with a field still focused, a structural action (+ aspect,
+      // a row's ×, ...) changed the data but not the screen, because
+      // `_rebuildRegionUnlessFocused` skips the region holding the focused field. Commit that
+      // field first (a synchronous blur runs its own commit), so the action's rebuild goes
+      // through. `handler` only uses indices captured at build time, which a text-only commit
+      // does not shift.
+      this._commitFocusedField();
       handler(e);
     });
     // `preventDefault()` on mousedown only suppresses the browser's default focus-shift, not
@@ -2563,6 +2569,13 @@ export class FateCardView extends window.WhiteboardObject {
       e.preventDefault();
       e.stopPropagation();
     });
+  }
+
+  /** Blurs (and so commits) the field focused inside this card, if any. */
+  _commitFocusedField() {
+    const container = window.Whiteboard?.layer?.getObjectContainer(this.id);
+    const active = document.activeElement;
+    if (active?.isContentEditable && container?.contains(active)) active.blur();
   }
 
   /** task 12.1: toggles a skill's `hidden` field (I6) at its TRUE array index - already part of
