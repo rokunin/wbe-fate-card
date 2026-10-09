@@ -12,6 +12,10 @@ import {
   regionsAffectedBy,
   sortSkillsByValue,
   pruneEmptyAspects,
+  removeAspectAt,
+  consequenceSlotLabel,
+  addConsequenceSlot,
+  removeEmptyConsequenceSlot,
   isValidPortraitSource,
   addBoxToRow,
   removeBoxFromRow,
@@ -87,6 +91,65 @@ const escapeHtml = (value) =>
 /** Exported so FateCardPanel (the toolbar's own floating DOM - see design.md Decision 1,
  * revised for the owner's live-check bug 1) can build its EN/RU strings the same way. */
 export const t = (card) => I18N[card.lang] || I18N.en;
+
+/** Can this page read the clipboard on a click? Only in a secure context (https, localhost);
+ * players on a plain http LAN/VPN address cannot. */
+const canReadClipboard = () => !!navigator.clipboard?.read;
+
+/**
+ * Ctrl+V while the pointer is over a card's portrait (edit mode) pastes into the portrait - one
+ * step, on any address (owner report 2026-10-04). Before the paste event exists, the keydown
+ * commits whatever card field is open and focuses the portrait; the browser then delivers the
+ * paste to it, WBE leaves pastes on a `data-wbe-paste-target` element alone (its documented
+ * opt-out, checked on `document.activeElement`), and the portrait's own `paste` listener
+ * (`_wirePortraitDropZone`) takes it. Installed once, on the first portrait drop zone.
+ */
+let portraitPasteShortcutInstalled = false;
+/**
+ * Leaving a text: a left click anywhere outside the field being typed in commits it (owner
+ * 2026-10-05), not only a click outside the card. Clicks inside the card never moved focus (WBE
+ * cancels the pointerdown, so no mousedown and no focus change follow), so the field stayed open.
+ * Hence pointerdown, in the capture phase on window, ahead of every card and WBE handler.
+ * Left alone: a click inside the field itself; into another field of the same card (the browser
+ * moves focus there and the blur listener sees where it went); a pick from the skill suggestions
+ * (it needs the field still focused); and any control ([data-wbe-interactive]): those commit the
+ * field themselves on mousedown (_wireControlAction), and blurring earlier would rebuild the
+ * region under the control before its own handler runs. Installed once for all cards.
+ */
+let clickAwayCommitInstalled = false;
+function installClickAwayCommit() {
+  if (clickAwayCommitInstalled) return;
+  clickAwayCommitInstalled = true;
+  window.addEventListener('pointerdown', (e) => {
+    if (e.button !== 0) return;
+    const active = document.activeElement;
+    if (!active?.isContentEditable) return;
+    const body = active.closest('.wbe-fate-card-body');
+    if (!body) return;
+    const target = e.target instanceof Element ? e.target : null;
+    if (target) {
+      if (active.contains(target)) return;
+      if (target.closest('.wbe-fate-card-suggestions')) return;
+      if (target.closest('[data-wbe-interactive]')) return;
+      if (target.isContentEditable && body.contains(target)) return;
+    }
+    active.blur();
+  }, true);
+}
+
+function installPortraitPasteShortcut() {
+  if (portraitPasteShortcutInstalled) return;
+  portraitPasteShortcutInstalled = true;
+  window.addEventListener('keydown', (e) => {
+    if (e.code !== 'KeyV' || !(e.ctrlKey || e.metaKey) || e.altKey || e.shiftKey) return;
+    const wrap = [...document.querySelectorAll('.wbe-fate-card-portrait-wrap[data-wbe-paste-target]')]
+      .find((el) => el.matches(':hover'));
+    if (!wrap || document.activeElement === wrap) return;
+    const active = document.activeElement;
+    if (active?.isContentEditable && wrap.closest('.wbe-fate-card-body')?.contains(active)) active.blur();
+    wrap.focus({ preventScroll: true });
+  }, true);
+}
 
 export class FateCardView extends window.WhiteboardObject {
   constructor(data) {
@@ -192,6 +255,7 @@ export class FateCardView extends window.WhiteboardObject {
     // re-attached - rebuilds only ever replace a region's children, never this container
     // element itself.
     el.addEventListener('dblclick', (e) => this._handleDblClick(e));
+    installClickAwayCommit();
     return el;
   }
 
@@ -295,6 +359,7 @@ export class FateCardView extends window.WhiteboardObject {
       locked: this.locked,
       // decision C: a synced boolean; only a GM may flip it (see toggleNpc()).
       npc: this.npc,
+      skillMode: this.skillMode,
       theme: this.theme,
       lang: this.lang,
       fs: this.fs,
@@ -1137,10 +1202,13 @@ export class FateCardView extends window.WhiteboardObject {
         // Escape-to-deselect) - move mode is meant to be the ONLY thing this Escape press turns
         // off, matching decision 24's "three ways to turn move mode off" being independent of
         // each other, not stacked.
+        // Capture phase: Foundry's own keydown listener sits on window too and was added first,
+        // so a bubble-phase stopPropagation here could not stop it opening the main menu.
         e.stopPropagation();
+        e.preventDefault();
         this._setPortraitMoveMode(false);
       };
-      window.addEventListener('keydown', this._portraitMoveEscHandler);
+      window.addEventListener('keydown', this._portraitMoveEscHandler, true);
     } else {
       this._clearPortraitMoveMode();
     }
@@ -1153,7 +1221,7 @@ export class FateCardView extends window.WhiteboardObject {
    * `canvasTearDown` handler (main.mjs), where nothing should rerender at all. Idempotent. */
   _clearPortraitMoveMode() {
     if (this._portraitMoveEscHandler) {
-      window.removeEventListener('keydown', this._portraitMoveEscHandler);
+      window.removeEventListener('keydown', this._portraitMoveEscHandler, true);
       this._portraitMoveEscHandler = null;
     }
     this._portraitMoveMode = false;
@@ -1347,6 +1415,9 @@ export class FateCardView extends window.WhiteboardObject {
    */
   _handleFieldKeydown(e, el, kind, index, boxIndex, commitOnce, cancelOnce) {
     const isFieldEdit = !!this.editingField && !this.editing;
+    // Esc belongs to the field: without stopPropagation Foundry's own key handler also got it
+    // and opened its main menu.
+    if (e.key === 'Escape') e.stopPropagation();
     if (isFieldEdit) {
       if (e.key === 'Escape') {
         e.preventDefault();
@@ -1490,7 +1561,8 @@ export class FateCardView extends window.WhiteboardObject {
     if (e.key === 'Backspace' && el.textContent === '') {
       e.preventDefault();
       commitOnce();
-      const aspects = (this.aspects || []).filter((_, i) => i !== index);
+      // Removes the empty row; later rows move up and the three base rows always remain.
+      const aspects = removeAspectAt(this.aspects, index);
       el.blur();
       window.Whiteboard.registry.update(this.id, { aspects }, 'local');
       if (index > 0) this._focusAspectField(index - 1);
@@ -1557,8 +1629,11 @@ export class FateCardView extends window.WhiteboardObject {
       default:
         return;
     }
+    // The template picked is the card's skill mode; clearing the list keeps the mode.
+    const skillMode = kind === 'fae' ? 'approaches' : (kind === 'clear' ? this.skillMode : 'skills');
     this.prevSkills = (this.skills || []).map((s) => ({ ...s }));
-    window.Whiteboard.registry.update(this.id, { skills }, 'local');
+    this.prevSkillMode = this.skillMode;
+    window.Whiteboard.registry.update(this.id, { skills, skillMode }, 'local');
     // Mockup: `if (e.target.value === 'pyramid') focusIn(c, '.sk [data-f="nm"]');` - the
     // rebuild triggered by the update above has already run synchronously by this point.
     if (kind === 'pyramid') this._focusSkillField(0);
@@ -1572,8 +1647,10 @@ export class FateCardView extends window.WhiteboardObject {
   _undoSkillTemplate() {
     if (!this.prevSkills) return;
     const skills = this.prevSkills;
+    const skillMode = this.prevSkillMode ?? this.skillMode;
     this.prevSkills = null;
-    window.Whiteboard.registry.update(this.id, { skills }, 'local');
+    this.prevSkillMode = null;
+    window.Whiteboard.registry.update(this.id, { skills, skillMode }, 'local');
   }
 
   // -------------------------------------------------------------------------------------
@@ -1597,6 +1674,9 @@ export class FateCardView extends window.WhiteboardObject {
     const strings = t(this);
     const used = (this.skills || []).map((s) => s.name);
     const query = fieldEl.textContent || '';
+    // Only a card set up as Core skills gets suggestions; an approaches card takes any names,
+    // any number of them (owner decision 2026-10-04 - see skillMode in card-model.mjs).
+    if (this.skillMode !== 'skills') return;
     const pool = filterSkillSuggestions(used, strings.core, query);
     if (!pool.length) return;
     const container = window.Whiteboard?.layer?.getObjectContainer(this.id);
@@ -1863,11 +1943,24 @@ export class FateCardView extends window.WhiteboardObject {
   _toggleBox(rowIndex, boxIndex) {
     if (this._isNpcRestrictedForViewer()) return;
     if (this._refuseIfEditingElsewhere()) return;
+    // fate-card-consequence-slots D2: a Consequences text still being typed here commits first,
+    // so the slot is added to it rather than overwritten by it later.
+    this._commitFocusedField();
     const boxes = (this.boxes || []).map((row) => row.map((b) => ({ ...b })));
     const box = boxes[rowIndex]?.[boxIndex];
     if (!box) return;
     box.marked = !box.marked;
-    window.Whiteboard.registry.update(this.id, { boxes }, 'local');
+    const changes = { boxes };
+    // A red box is a consequence: marking it adds a slot line to the Consequences tab, unmarking
+    // takes that slot back while it is still empty. Same write as the mark, so every client and
+    // undo see them together; on a locked card too (owner 2026-10-05).
+    if (box.red) {
+      const label = consequenceSlotLabel(box.value, t(this).consSlot);
+      const cons = this.tabs?.cons || '';
+      const nextCons = box.marked ? addConsequenceSlot(cons, label) : removeEmptyConsequenceSlot(cons, label);
+      if (nextCons !== cons) changes.tabs = { ...this.tabs, cons: nextCons };
+    }
+    window.Whiteboard.registry.update(this.id, changes, 'local');
     if (box.marked && box.red) this._setActiveTabLocal('cons');
   }
 
@@ -1953,6 +2046,7 @@ export class FateCardView extends window.WhiteboardObject {
   _buildLeft() {
     const left = document.createElement('div');
     left.className = 'wbe-fate-card-left';
+    left.appendChild(this._buildNameRow());
 
     // task 11: portrait ingestion (I13/design.md Decision 8), edit-mode only - matching the
     // mockup's own gating (`left()`'s `else if (ed)` branch: outside edit mode with no
@@ -1989,9 +2083,17 @@ export class FateCardView extends window.WhiteboardObject {
     } else if (this.editing) {
       const empty = document.createElement('div');
       empty.className = 'wbe-fate-card-portrait-wrap wbe-fate-card-portrait-empty';
-      empty.textContent = t(this).pickPortrait;
+      const label = document.createElement('span');
+      label.textContent = t(this).pickPortrait;
+      empty.appendChild(label);
+      if (canReadClipboard()) empty.appendChild(this._buildPortraitPasteButton(true));
       this._wirePortraitDropZone(empty);
       left.appendChild(empty);
+    } else {
+      // No portrait outside edit mode: an empty square keeps the card's shape (owner 2026-10-04).
+      const blank = document.createElement('div');
+      blank.className = 'wbe-fate-card-portrait-wrap wbe-fate-card-portrait-blank';
+      left.appendChild(blank);
     }
 
     const boxesEl = document.createElement('div');
@@ -2174,6 +2276,59 @@ export class FateCardView extends window.WhiteboardObject {
    * notification and otherwise ignored (the previous, already-set portrait if any is left
    * untouched).
    */
+  /**
+   * Owner request 2026-10-04: a button that pastes the clipboard's picture into the portrait.
+   * Ctrl+V never reached the portrait - WBE handles Ctrl+V on the board itself - so the card
+   * reads the clipboard on an explicit click instead. The Clipboard API needs a secure context
+   * (https or localhost); over plain http on a LAN it is missing, and the user is told to drop
+   * or choose the file instead.
+   * @param {boolean} [withLabel=false]  Text label (empty portrait) or icon only (framing bar).
+   */
+  _buildPortraitPasteButton(withLabel = false) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = withLabel
+      ? 'wbe-fate-card-portrait-paste'
+      : 'wbe-fate-card-portrait-icon wbe-fate-card-portrait-paste';
+    btn.setAttribute('data-wbe-interactive', 'true');
+    btn.title = t(this).pastePortraitT;
+    btn.textContent = withLabel ? t(this).pastePortrait : '📋';
+    this._wireControlAction(btn, () => this._pastePortraitFromClipboard());
+    return btn;
+  }
+
+  /**
+   * The 📋 button: reads the clipboard in one click. Only built where the browser allows that
+   * (https or localhost - see canReadClipboard); on a plain http address the portrait takes a
+   * Ctrl+V instead (installPortraitPasteShortcut). If the browser still refuses here, the user
+   * is pointed at that Ctrl+V. Owner report 2026-10-04.
+   */
+  async _pastePortraitFromClipboard() {
+    const askForCtrlV = () => ui.notifications?.info(t(this).pressCtrlV);
+    const clipboard = navigator.clipboard;
+    if (!clipboard?.read) {
+      askForCtrlV();
+      return;
+    }
+    try {
+      for (const item of await clipboard.read()) {
+        const type = item.types.find((ty) => ty.startsWith('image/'));
+        if (type) {
+          const blob = await item.getType(type);
+          await this._setPortraitFromFile(new File([blob], `clipboard.${type.split('/')[1] || 'png'}`, { type }));
+          return;
+        }
+      }
+      const text = (await clipboard.readText?.())?.trim();
+      if (text) this._setPortraitFromText(text);
+      else ui.notifications?.info(t(this).pasteEmpty);
+    } catch (err) {
+      // Permission refused or no user activation: fall back to a real Ctrl+V.
+      console.warn('fate-card | reading the clipboard failed', err);
+      askForCtrlV();
+    }
+  }
+
   _setPortraitFromText(text) {
     const trimmed = (text ?? '').trim();
     if (!trimmed) return;
@@ -2241,6 +2396,7 @@ export class FateCardView extends window.WhiteboardObject {
    * the `×` control above stops its own click from reaching this listener).
    */
   _wirePortraitDropZone(el) {
+    installPortraitPasteShortcut();
     el.setAttribute('data-wbe-paste-target', 'true');
     el.setAttribute('data-wbe-interactive', 'true');
     el.tabIndex = 0;
@@ -2337,6 +2493,7 @@ export class FateCardView extends window.WhiteboardObject {
     reset.textContent = '⟲';
     this._wireControlAction(reset, () => this._resetPortraitFraming());
     bar.appendChild(reset);
+    if (canReadClipboard()) bar.appendChild(this._buildPortraitPasteButton());
 
     wrap.appendChild(bar);
 
@@ -2394,14 +2551,9 @@ export class FateCardView extends window.WhiteboardObject {
     const ratio = n <= 6 ? 1 : n <= 8 ? 0.9 : n <= 10 ? 0.85 : 0.75;
     skills.style.fontSize = `${Math.round(this.fs * ratio)}px`;
 
-    const values = list.map(({ entry }) => entry.value);
-    const minV = values.length ? Math.min(...values) : 0;
-    const singleMin = values.filter((v) => v === minV).length === 1;
-
     list.forEach(({ entry: s, index: i }) => {
-      const low = n > 1 && singleMin && s.value === minV;
       const row = document.createElement('div');
-      row.className = 'wbe-fate-card-row wbe-fate-card-row--skill' + (s.hidden && this.npc ? ' wbe-fate-card-row--hidden' : '') + (low ? ' wbe-fate-card-row--low' : '');
+      row.className = 'wbe-fate-card-row wbe-fate-card-row--skill' + (s.hidden && this.npc ? ' wbe-fate-card-row--hidden' : '');
       row.dataset.index = String(i);
 
       const strip = document.createElement('span');
@@ -2594,10 +2746,8 @@ export class FateCardView extends window.WhiteboardObject {
     this._focusSkillField(skills.length - 1);
   }
 
-  _buildRight() {
-    const right = document.createElement('div');
-    right.className = 'wbe-fate-card-right';
-
+  /** The character name, at the top of the left column above the portrait (owner 2026-10-04). */
+  _buildNameRow() {
     const nameRow = document.createElement('div');
     nameRow.className = 'wbe-fate-card-row wbe-fate-card-row--name';
     const nameStrip = document.createElement('span');
@@ -2609,7 +2759,14 @@ export class FateCardView extends window.WhiteboardObject {
     this._wireField(nameField, 'name');
     nameStrip.appendChild(nameField);
     nameRow.appendChild(nameStrip);
-    right.appendChild(nameRow);
+    return nameRow;
+  }
+
+  _buildRight() {
+    const right = document.createElement('div');
+    right.className = 'wbe-fate-card-right';
+    // The name moved above the portrait (owner 2026-10-04); the column keeps a name-row-high
+    // top padding in CSS, so the aspects stay exactly where they were.
 
     // decision 8/I6: a hidden aspect never reaches a non-GM's DOM at all on an NPC card; a GM
     // still sees it there, dimmed and struck through. Phase 1 owner-check fix 3 (see
@@ -2675,9 +2832,11 @@ export class FateCardView extends window.WhiteboardObject {
     return right;
   }
 
-  /** task 9.1 (mockup's `delasp` action): removes the aspect at its TRUE array index. */
+  /** task 9.1 (mockup's `delasp` action): removes the aspect at its TRUE array index. On one of
+   * the three base aspects it empties the row instead, so the others keep their places
+   * (owner decision 2026-10-04 - see removeAspectAt). */
   _removeAspect(index) {
-    const aspects = (this.aspects || []).filter((_, i) => i !== index);
+    const aspects = removeAspectAt(this.aspects, index, { keepBaseSlot: true });
     window.Whiteboard.registry.update(this.id, { aspects }, 'local');
   }
 
@@ -2737,7 +2896,8 @@ export class FateCardView extends window.WhiteboardObject {
     const body = document.createElement('div');
     body.className = 'wbe-fate-card-tabs-body';
     const text = document.createElement('span');
-    text.className = 'wbe-fate-card-strip wbe-fate-card-tab-text';
+    text.className = 'wbe-fate-card-strip wbe-fate-card-tab-text'
+      + (this.activeTab === 'cons' ? ' wbe-fate-card-tab-text--cons' : ''); // reddish (owner 2026-10-04)
     text.dataset.ph = t(this).tabPh[this.activeTab];
     text.textContent = this.tabs?.[this.activeTab] || '';
     // task 7: keyed by the currently active tab, not by a row index - preserves embedded

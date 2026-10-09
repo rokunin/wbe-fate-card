@@ -37,6 +37,7 @@ export function createDefaultCard() {
     aspects: [
       { text: '', hidden: false },
       { text: '', hidden: false },
+      { text: '', hidden: false },
     ],
     boxes: [
       [
@@ -51,6 +52,10 @@ export function createDefaultCard() {
     tabs: { cons: '', stunts: '', extras: '', notes: '' },
     locked: false,
     npc: false,
+    // Owner decision 2026-10-04: which skill template the card was set up with. 'approaches'
+    // (the default list): no suggestions, any names, any count. 'skills' (Core pyramid or all
+    // 18): the Core skills are suggested for a new row.
+    skillMode: 'approaches',
     theme: 'gold',
     lang: 'en',
     fs: 20,
@@ -266,7 +271,7 @@ function normalizeSkills(skills, fallback) {
 
 function normalizeAspects(aspects, fallback) {
   if (!Array.isArray(aspects)) return fallback;
-  return aspects.map(normalizeAspectEntry);
+  return withBaseAspects(aspects.map(normalizeAspectEntry));
 }
 
 function normalizeBoxes(boxes, fallback) {
@@ -311,6 +316,7 @@ export function normalizeCard(data) {
     tabs: normalizeTabs(source.tabs, base.tabs),
     locked: typeof source.locked === 'boolean' ? source.locked : base.locked,
     npc: typeof source.npc === 'boolean' ? source.npc : base.npc,
+    skillMode: source.skillMode === 'skills' ? 'skills' : 'approaches',
     theme: typeof source.theme === 'string' ? source.theme : base.theme,
     lang: typeof source.lang === 'string' ? source.lang : base.lang,
     fs: typeof source.fs === 'number' && Number.isFinite(source.fs) ? source.fs : base.fs,
@@ -436,12 +442,85 @@ export function sortSkillsByValue(skills) {
 }
 
 /**
- * Leaving edit mode (design.md Decision 7, mockup's `tidy()`): unlike skills, an aspect left
- * empty is dropped - `c.aspects = c.aspects.filter(a => a.t.trim())`.
+ * The three base aspects (high concept, trouble, aspect) always have a row, like the name
+ * always has its field (owner decision 2026-10-04): an empty one shows its placeholder.
+ */
+export const BASE_ASPECT_COUNT = 3;
+
+/** Pads an aspect list with empty rows up to the three base aspects. */
+export function withBaseAspects(aspects) {
+  const list = Array.isArray(aspects) ? [...aspects] : [];
+  while (list.length < BASE_ASPECT_COUNT) list.push({ text: '', hidden: false });
+  return list;
+}
+
+/**
+ * Leaving edit mode (design.md Decision 7, mockup's `tidy()`, revised 2026-10-04): an extra
+ * aspect left empty is dropped; the three base aspects stay, empty or not.
  */
 export function pruneEmptyAspects(aspects) {
   if (!Array.isArray(aspects)) return aspects;
-  return aspects.filter((a) => (a?.text ?? '').trim() !== '');
+  return withBaseAspects(aspects.filter((a, i) => i < BASE_ASPECT_COUNT || (a?.text ?? '').trim() !== ''));
+}
+
+/**
+ * Removes the aspect at `index`. Never leaves fewer than the three base rows: later rows move
+ * up and an empty row is added at the end. With `keepBaseSlot`, a base aspect (index < 3) is
+ * emptied instead, so the others keep their places (the row's × control).
+ */
+/**
+ * fate-card-consequence-slots D1: the slot line a marked red box adds to the Consequences tab.
+ * A box numbered 2, 4 or 6 gets its severity name ("Mild (2): "), any other number "N: ", a box
+ * without a number the generic word ("Consequence: ").
+ * @param {string|number} value - the box's own number (free text)
+ * @param {{2: string, 4: string, 6: string, none: string}} labels - the card language's names
+ * @returns {string}
+ */
+export function consequenceSlotLabel(value, labels) {
+  const v = String(value ?? '').trim();
+  if (v === '2' || v === '4' || v === '6') return `${labels[v]} (${v}): `;
+  if (v) return `${v}: `;
+  return `${labels.none}: `;
+}
+
+/**
+ * Appends a slot line to the Consequences text, on a line of its own.
+ * @param {string} text
+ * @param {string} label - from consequenceSlotLabel
+ * @returns {string}
+ */
+export function addConsequenceSlot(text, label) {
+  const base = typeof text === 'string' ? text : '';
+  if (!base || base.endsWith('\n')) return base + label;
+  return `${base}\n${label}`;
+}
+
+/**
+ * Removes the last line that is exactly this slot with nothing typed after it (compared trimmed),
+ * together with its line break. A slot with text after the label is kept.
+ * @param {string} text
+ * @param {string} label - from consequenceSlotLabel
+ * @returns {string}
+ */
+export function removeEmptyConsequenceSlot(text, label) {
+  const base = typeof text === 'string' ? text : '';
+  const lines = base.split('\n');
+  const want = label.trim();
+  for (let i = lines.length - 1; i >= 0; i--) {
+    if (lines[i].trim() !== want) continue;
+    lines.splice(i, 1);
+    return lines.join('\n');
+  }
+  return base;
+}
+
+export function removeAspectAt(aspects, index, { keepBaseSlot = false } = {}) {
+  const list = Array.isArray(aspects) ? aspects.map((a) => ({ ...a })) : [];
+  if (keepBaseSlot && index < BASE_ASPECT_COUNT) {
+    if (list[index]) list[index] = { ...list[index], text: '' };
+    return withBaseAspects(list);
+  }
+  return withBaseAspects(list.filter((_, i) => i !== index));
 }
 
 /**
@@ -555,6 +634,7 @@ export function filterSkillSuggestions(usedNames, coreNames, query) {
   );
 }
 
+
 /**
  * Review finding 5: a pasted plain-text portrait source (`FateCardView._setPortraitFromText`)
  * used to be stored with no validation at all - any string, including a `data:` URL (bypassing
@@ -600,9 +680,10 @@ const NON_RENDER_KEYS = new Set(['selected', 'massSelected', 'x', 'y', 'zIndex',
  * are read by every region's own inline style/markup, so they affect all four.
  */
 const REGION_KEY_MAP = {
-  name: ['right'],
+  name: ['left'],
   aspects: ['right'],
   skills: ['skills'],
+  skillMode: ['skills'],
   portrait: ['left'],
   boxes: ['left'],
   // fate-card-portrait-framing: a remote commit of the framing draft touches the same region

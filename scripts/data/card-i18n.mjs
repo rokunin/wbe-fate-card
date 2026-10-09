@@ -31,7 +31,12 @@ export const I18N = {
     undo: 'Bring back the previous list',
     addSkill: '+ skill', addAsp: '+ aspect',
     boxRow: 'row', addRow: '+ row of boxes', redT: 'Red frame / grey',
-    pickPortrait: 'click or Ctrl+V: portrait',
+    pickPortrait: 'click, drop a picture, or point here and press Ctrl+V',
+    // Owner request 2026-10-04: Ctrl+V never reached the portrait (WBE takes Ctrl+V on the
+    // board), so pasting goes through an explicit button that reads the clipboard itself.
+    pastePortrait: '📋 from clipboard', pastePortraitT: 'Paste the picture from the clipboard',
+    pressCtrlV: 'Point at the portrait and press Ctrl+V to paste the picture.',
+    pasteEmpty: 'There is no picture in the clipboard.',
     eyeOn: 'Visible to players', eyeOff: 'Hidden from players',
     hint: 'Enter: new line · Backspace on empty or ×: remove · ↑↓ in a skill: value · Esc: leave edit mode',
     // fate-card-editing task 5.3/5.4 (design.md Decision 11): shown to the editing client when
@@ -77,6 +82,8 @@ export const I18N = {
     portraitShapeT: 'Frame shape (click to cycle)',
     portraitResetT: 'Reset pan and zoom',
     frameShapes: { natural: 'As image', square: 'Square', '3:4': '3:4' },
+    // fate-card-consequence-slots: the slot line a marked red box adds to the Consequences tab.
+    consSlot: { 2: 'Mild', 4: 'Moderate', 6: 'Severe', none: 'Consequence' },
   },
   ru: {
     lock: 'Замок: нельзя двигать, броски и отметки работают', unlock: 'Разомкнуть',
@@ -91,7 +98,10 @@ export const I18N = {
     undo: 'Вернуть прежний список',
     addSkill: '+ навык', addAsp: '+ аспект',
     boxRow: 'строка', addRow: '+ строка квадратиков', redT: 'Красная рамка / серая',
-    pickPortrait: 'клик или Ctrl+V — портрет',
+    pickPortrait: 'клик, перетащите картинку или наведите и нажмите Ctrl+V',
+    pastePortrait: '📋 из буфера', pastePortraitT: 'Вставить картинку из буфера обмена',
+    pressCtrlV: 'Наведите на портрет и нажмите Ctrl+V, чтобы вставить картинку.',
+    pasteEmpty: 'В буфере обмена нет картинки.',
     eyeOn: 'Видно игрокам', eyeOff: 'Скрыто от игроков',
     hint: 'Enter — новая строка · Backspace на пустой или × — удалить · ↑↓ в навыке — значение · Esc — выйти из правки',
     lockedByOther: 'Занято:', lockedByNotice: 'Карточку заблокировал(а)',
@@ -113,5 +123,6 @@ export const I18N = {
     portraitShapeT: 'Форма рамки (клик — сменить)',
     portraitResetT: 'Сбросить сдвиг и масштаб',
     frameShapes: { natural: 'Как есть', square: 'Квадрат', '3:4': '3:4' },
+    consSlot: { 2: 'Лёгкое', 4: 'Среднее', 6: 'Тяжёлое', none: 'Последствие' },
   },
 };

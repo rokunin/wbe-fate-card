@@ -35,7 +35,9 @@
 
 .wbe-fate-card-left { grid-column: 1; grid-row: 1 / span 2; display: flex; flex-direction: column; gap: 10px; }
 .wbe-fate-card-skills { grid-column: 2; grid-row: 1; text-align: right; padding-top: calc(var(--fs) * 1.45 + 3px); color: var(--sk); }
-.wbe-fate-card-right { grid-column: 3; grid-row: 1; min-width: 0; }
+/* The name now sits above the portrait; this padding (same as the skills column's) keeps the
+   aspects at the height they had under the name. */
+.wbe-fate-card-right { grid-column: 3; grid-row: 1; min-width: 0; padding-top: calc(var(--fs) * 1.45 + 3px); }
 .wbe-fate-card-tabs { grid-column: 2 / 4; grid-row: 2; min-width: 0; contain: inline-size; }
 
 /*
@@ -59,11 +61,14 @@
  */
 .wbe-fate-card-portrait-empty {
   box-sizing: border-box; display: flex; align-items: center; justify-content: center; text-align: center;
-  width: 300px; height: 160px; padding: 20px; background: var(--ink);
+  position: relative; /* anchors the "from clipboard" button at the bottom edge */
+  width: 300px; height: 300px; padding: 20px; background: var(--ink);
   border: 2px dashed color-mix(in srgb, var(--tx) 30%, transparent);
   font: 13px system-ui, sans-serif; color: color-mix(in srgb, var(--tx) 60%, transparent); cursor: pointer;
 }
 .wbe-fate-card-body--editing .wbe-fate-card-portrait-wrap { cursor: pointer; }
+/* No portrait, not editing: an empty square in the portrait frame. */
+.wbe-fate-card-portrait-blank { width: 300px; height: 300px; background: var(--ink); }
 /*
  * Found live (release verification, 2026-09-28): this element always carries BOTH
  * `wbe-fate-card-remove` (the shared skill/aspect-row × button styling, `all: unset` further
@@ -101,6 +106,15 @@
   cursor: pointer; font-size: 13px; line-height: 1;
 }
 .wbe-fate-card-portrait-icon:hover { background: var(--hl); border-color: var(--uifg); }
+/* The labelled "📋 from clipboard" button on an empty portrait (the framing bar uses the icon).
+   Sits at the bottom edge so a click in the middle of the frame still opens the file picker. */
+.wbe-fate-card-portrait-paste:not(.wbe-fate-card-portrait-icon) {
+  all: unset; box-sizing: border-box; position: absolute; bottom: 8px; left: 50%; transform: translateX(-50%);
+  padding: 4px 10px; background: var(--ink); color: var(--uifg);
+  border: 1px solid color-mix(in srgb, var(--uifg) 35%, transparent);
+  cursor: pointer; font: 12px system-ui, sans-serif;
+}
+.wbe-fate-card-portrait-paste:not(.wbe-fate-card-portrait-icon):hover { background: var(--hl); border-color: var(--uifg); }
 /* The ✥ button's own pressed state while move mode is on. */
 .wbe-fate-card-portrait-move.is-active { background: var(--hl); border-color: var(--uifg); }
 .wbe-fate-card-portrait-shape { font-size: 11px; }
@@ -113,7 +127,6 @@
   -webkit-box-decoration-break: clone; box-decoration-break: clone;
 }
 .wbe-fate-card-row--name .wbe-fate-card-strip { font-weight: 700; }
-.wbe-fate-card-row--skill.wbe-fate-card-row--low .wbe-fate-card-strip { font-weight: 700; }
 .wbe-fate-card-row--hidden { opacity: .45; }
 .wbe-fate-card-row--hidden .wbe-fate-card-strip { text-decoration: line-through; }
 
@@ -213,10 +226,17 @@
 /* fate-card-theme-colours (decision 25): "UI (tab titles, card controls)" - every tab title's
    text (active or not) driven by --uifg instead of the inherited --tx (main text), so it's
    overridable independently of the main-text colour. */
-.wbe-fate-card-tab { cursor: pointer; background: var(--ink); padding: 0 7px; color: var(--uifg); }
-.wbe-fate-card-tab--active { color: var(--uifg); font-weight: 700; }
+/* The open tab reads as joined to the text below it: full strength, an underline in the UI
+ * colour; the others are dimmed (owner 2026-10-05: bold alone did not show which one is open). */
+.wbe-fate-card-tab { cursor: pointer; background: var(--ink); padding: 0 7px; color: var(--uifg); opacity: .5; }
+.wbe-fate-card-tab:hover { opacity: .8; }
+.wbe-fate-card-tab--active { color: var(--uifg); font-weight: 700; opacity: 1; box-shadow: inset 0 -2px 0 var(--uifg); }
+.wbe-fate-card-tab--active:hover { opacity: 1; }
 .wbe-fate-card-tab-dot { font-style: normal; color: var(--uifg); margin-left: 2px; }
 .wbe-fate-card-tab-text { white-space: pre-wrap; }
+/* Consequences read reddish (owner 2026-10-04): the main text colour pulled toward the card's own
+   red box colour, so it follows every theme instead of being one fixed red. */
+.wbe-fate-card-tab-text--cons { color: color-mix(in srgb, var(--tx) 45%, var(--red)); }
 .wbe-fate-card-tab-text:empty { display: block; background: color-mix(in srgb, var(--ink) 55%, transparent); min-height: 1.45em; }
 .wbe-fate-card-tab-text:empty::before { content: attr(data-ph); opacity: .3; }
 
@@ -304,6 +324,10 @@
  */
 .wbe-fate-card [contenteditable] { user-select: text; outline: none; cursor: text; }
 .wbe-fate-card [contenteditable]:focus { background: color-mix(in srgb, var(--tx) 16%, transparent); }
+/* Chrome draws no caret in an empty inline field whose placeholder is ::before content: an
+ * inline-block gives it a line box, so the caret blinks at the start of the placeholder
+ * (owner 2026-10-05). Same width as before, so nothing moves. The tab text is a block already. */
+.wbe-fate-card [contenteditable]:empty:focus:not(.wbe-fate-card-tab-text) { display: inline-block; min-width: 1px; }
 .wbe-fate-card-body--editing [contenteditable] {
   border-bottom: 1px dashed color-mix(in srgb, var(--tx) 55%, transparent);
 }
